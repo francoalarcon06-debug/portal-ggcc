@@ -62,7 +62,6 @@
       opacity: 0.6;
       pointer-events: none;
     }
-    code { background: #eef2ff; padding: 2px 6px; border-radius: 6px; }
   </style>
 </head>
 
@@ -70,18 +69,11 @@
   <div class="card">
     <h1>Subir Gastos Comunes</h1>
 
-    <div class="hint">
-      <b>Formato recomendado:</b> <code>Colilla_2025-10_dpto_308.pdf</code><br/>
-      <b>También acepta:</b> <code>Colilla2025-10-edificiomilano-308.pdf</code><br/>
-      Se extrae automáticamente: <b>Período</b> + <b>Departamento</b> (y si existe, un <b>identificador</b> de edificio).
-    </div>
-
     <form id="f">
       <div class="step-title">1) Seleccioná el PDF</div>
       <div class="box">
         <label>Archivo PDF</label>
         <input id="pdf" name="pdf" type="file" accept="application/pdf" required />
-        <div class="hint" id="filenameHint"></div>
       </div>
 
       <div class="step-title">2) Verificá / corregí datos</div>
@@ -89,40 +81,28 @@
         <div class="row">
           <div>
             <label>Período</label>
-            <input id="period" name="period" type="month" required />
-            <div class="hint">Ej: 2025-10</div>
+            <input id="period" name="period" type="month" />
           </div>
 
           <div>
             <label>Departamento</label>
-            <input id="department_code" name="department_code" required placeholder="308" inputmode="numeric" />
-            <div class="hint">Ej: 308</div>
+            <input id="department_code" name="department_code" inputmode="numeric" />
           </div>
         </div>
 
-        <!-- ✅ MONTO GC (auto + editable) -->
         <label>Monto Gasto Común (CLP)</label>
         <input
           id="monto_gc"
           name="monto_gc"
           type="text"
           inputmode="numeric"
-          placeholder="Ej: 125430 (también podés pegar 125.430)"
+          placeholder="Ej: 125430"
         />
-        <div class="hint" id="montoHint">
-          Monto detectado automáticamente desde el PDF (si es posible). Podés corregirlo si hace falta.
-        </div>
 
-        <label>Edificio (opcional por ahora)</label>
-        <input id="building" name="building_slug" placeholder="edificiomilano (opcional)" />
-        <div class="hint">
-          Si después querés que sea obligatorio y/o que sea un ID, lo cambiamos. Por ahora lo dejamos opcional.
-        </div>
+        <label>Edificio (opcional)</label>
+        <input id="building" name="building_slug" />
 
         <button id="submitBtn" type="submit">Subir PDF</button>
-        <div class="hint">
-          El archivo quedará asociado al período, departamento y monto seleccionados.
-        </div>
       </div>
 
       <div id="msg"></div>
@@ -130,215 +110,111 @@
   </div>
 
   <script>
-    // ✅ TU WEBHOOK (TEST) para guardar definitivo
-    const N8N_WEBHOOK_URL = "https://n8n.proyectosfranco.cl/webhook-test/subir-ggcc";
-
-    // ✅ webhook "preview" (detecta monto desde el PDF y devuelve JSON)
-    // Si todavía no lo creaste, no pasa nada: el front seguirá funcionando sin autocompletar.
-    const N8N_PREVIEW_URL = "https://n8n.proyectosfranco.cl/webhook-test/preview-ggcc";
+    const WEBHOOK_URL = "https://n8n.proyectosfranco.cl/webhook-test/subir-ggcc";
 
     const form = document.getElementById("f");
     const msg = document.getElementById("msg");
 
     const pdfInput = document.getElementById("pdf");
-    const filenameHint = document.getElementById("filenameHint");
-
     const step2 = document.getElementById("step2");
+
     const periodInput = document.getElementById("period");
     const deptInput = document.getElementById("department_code");
     const montoInput = document.getElementById("monto_gc");
-    const montoHint = document.getElementById("montoHint");
     const buildingInput = document.getElementById("building");
     const submitBtn = document.getElementById("submitBtn");
 
-    // A) Colilla_2025-10_dpto_308.pdf
-    const RX_FORMAT_B = /^Colilla_(\d{4}-\d{2})_dpto_(\d{1,5})(?:\.pdf)?$/i;
-
-    // B) Colilla2025-10-edificiomilano-308.pdf
-    const RX_FORMAT_A = /^Colilla(\d{4}-\d{2})(?:-([a-z0-9_]+))?-(\d{1,5})(?:\.pdf)?$/i;
-
-    function setMessage(text, className) {
+    function setMessage(text, cls) {
       msg.textContent = text;
-      msg.className = className || "";
+      msg.className = cls || "";
     }
 
     function enableStep2(enable) {
-      if (enable) step2.classList.remove("disabled");
-      else step2.classList.add("disabled");
+      step2.classList.toggle("disabled", !enable);
     }
 
-    function parseFilename(name) {
-      const base = (name || "").split(/[/\\]/).pop();
-
-      let m = base.match(RX_FORMAT_B);
-      if (m) {
-        return { ok: true, format: "B", period: m[1], dept: m[2], building: "" };
-      }
-
-      m = base.match(RX_FORMAT_A);
-      if (m) {
-        return { ok: true, format: "A", period: m[1], building: m[2] || "", dept: m[3] };
-      }
-
-      return { ok: false, base };
-    }
-
-    async function safeReadError(res) {
-      const ct = (res.headers.get("content-type") || "").toLowerCase();
-      if (ct.includes("application/json")) {
-        try {
-          const j = await res.json();
-          return j.message || JSON.stringify(j);
-        } catch {
-          return "Respuesta JSON inválida del servidor.";
-        }
-      }
-      if (ct.includes("text/html")) return `Error ${res.status} (HTML). Revisá que el webhook exista y el workflow esté en "Listen".`;
-      return (await res.text()) || `Error ${res.status}`;
-    }
-
-    function normalizeCLPNumber(value) {
+    function normalizeNumber(value) {
       const s = String(value ?? "").replace(/[^\d]/g, "");
-      return s ? Number(s) : null;
+      return s ? Number(s) : "";
     }
 
-    async function tryPreviewMonto(file) {
-      const fd = new FormData();
-      fd.append("pdf", file);
-      fd.append("original_filename", file.name);
-
-      try {
-        const res = await fetch(N8N_PREVIEW_URL, { method: "POST", body: fd });
-        if (!res.ok) return null;
-
-        const j = await res.json().catch(() => null);
-        if (!j || typeof j !== "object") return null;
-
-        const raw = j.monto_gc ?? j.monto_detectado ?? j.monto ?? null;
-        const n = normalizeCLPNumber(raw);
-        if (n === null || Number.isNaN(n)) return null;
-
-        return n;
-      } catch {
-        return null;
-      }
-    }
-
+    // ===== PREVIEW =====
     pdfInput.addEventListener("change", async () => {
       setMessage("", "");
       enableStep2(false);
 
-      const file = pdfInput.files && pdfInput.files[0];
-      if (!file) {
-        filenameHint.textContent = "";
-        return;
-      }
+      const file = pdfInput.files?.[0];
+      if (!file) return;
 
       if (file.type !== "application/pdf") {
-        filenameHint.textContent = "";
-        setMessage("Error: seleccioná un PDF válido.", "err");
+        setMessage("Seleccioná un PDF válido.", "err");
         pdfInput.value = "";
         return;
       }
 
-      const parsed = parseFilename(file.name);
+      setMessage("Leyendo información del PDF...", "warn");
 
-      if (!parsed.ok) {
-        filenameHint.innerHTML = `
-          <span class="warn"><b>Nombre no reconocido.</b></span><br/>
-          Renombrá el archivo a uno de estos formatos:<br/>
-          - <code>Colilla_2025-10_dpto_308.pdf</code><br/>
-          - <code>Colilla2025-10-edificiomilano-308.pdf</code>
-        `;
-        setMessage("No puedo extraer datos del nombre. Renombrá el archivo y probá de nuevo.", "err");
-        return;
-      }
+      const fd = new FormData();
+      fd.append("pdf", file);
 
-      periodInput.value = parsed.period;
-      deptInput.value = parsed.dept;
-      buildingInput.value = parsed.building;
+      try {
+        const res = await fetch(`${WEBHOOK_URL}?mode=preview`, {
+          method: "POST",
+          body: fd
+        });
 
-      montoInput.value = "";
-      montoHint.textContent = "Detectando monto desde el PDF (si es posible)...";
+        if (!res.ok) throw new Error();
 
-      filenameHint.innerHTML = `
-        <span class="ok"><b>Detectado desde el nombre:</b></span><br/>
-        Período: <code>${parsed.period}</code> &nbsp;|&nbsp;
-        Depto: <code>${parsed.dept}</code>
-        ${parsed.building ? `&nbsp;|&nbsp; Edificio: <code>${parsed.building}</code>` : ""}
-      `;
+        const data = await res.json();
 
-      enableStep2(true);
-      setMessage("Revisá los datos y subí el PDF.", "warn");
+        periodInput.value = data.period || "";
+        deptInput.value = data.department_code || "";
+        montoInput.value = data.monto_gc || "";
+        buildingInput.value = data.building_slug || "";
 
-      const monto = await tryPreviewMonto(file);
-      if (monto !== null) {
-        montoInput.value = String(monto);
-        montoHint.textContent = "Monto detectado automáticamente desde el PDF. Podés corregirlo si hace falta.";
-      } else {
-        montoHint.textContent = "No pude detectar el monto automáticamente. Ingresalo manualmente (podés corregirlo igual).";
+        enableStep2(true);
+        setMessage("Datos detectados. Podés corregirlos si hace falta.", "ok");
+
+      } catch {
+        enableStep2(true);
+        setMessage("No se pudo leer el PDF automáticamente. Completá los datos manualmente.", "warn");
       }
     });
 
+    // ===== SAVE =====
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      const file = pdfInput.files && pdfInput.files[0];
+      const file = pdfInput.files?.[0];
       if (!file) {
-        setMessage("Seleccioná un PDF antes de subir.", "err");
-        return;
-      }
-
-      if (file.type !== "application/pdf") {
-        setMessage("Error: seleccioná un PDF válido.", "err");
-        return;
-      }
-
-      const period = (periodInput.value || "").trim();
-      const dept = (deptInput.value || "").trim();
-      const building = (buildingInput.value || "").trim();
-      const monto = normalizeCLPNumber(montoInput.value);
-
-      if (!/^\d{4}-\d{2}$/.test(period)) {
-        setMessage("Período inválido. Debe ser YYYY-MM (ej: 2025-10).", "err");
-        return;
-      }
-
-      if (!/^\d{1,5}$/.test(dept)) {
-        setMessage("Departamento inválido. Usa solo números (ej: 308).", "err");
+        setMessage("Seleccioná un PDF.", "err");
         return;
       }
 
       const fd = new FormData();
       fd.append("pdf", file);
-      fd.append("period", period);
-      fd.append("department_code", dept);
-      fd.append("building_slug", building);
-      fd.append("original_filename", file.name);
-
-      if (monto !== null) fd.append("monto_gc", String(monto));
+      fd.append("period", periodInput.value);
+      fd.append("department_code", deptInput.value);
+      fd.append("monto_gc", normalizeNumber(montoInput.value));
+      fd.append("building_slug", buildingInput.value);
 
       submitBtn.disabled = true;
-      setMessage("Subiendo...", "");
+      setMessage("Subiendo PDF...", "warn");
 
       try {
-        const res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: fd });
+        const res = await fetch(WEBHOOK_URL, {
+          method: "POST",
+          body: fd
+        });
 
-        if (!res.ok) {
-          const errMsg = await safeReadError(res);
-          setMessage("Error: " + errMsg, "err");
-          submitBtn.disabled = false;
-          return;
-        }
+        if (!res.ok) throw new Error();
 
-        setMessage("✅ PDF cargado correctamente.", "ok");
-
+        setMessage("✅ PDF guardado correctamente.", "ok");
         form.reset();
         enableStep2(false);
-        filenameHint.textContent = "";
-        montoHint.textContent = "Monto detectado automáticamente desde el PDF (si es posible). Podés corregirlo si hace falta.";
-      } catch (err) {
-        setMessage("Error de conexión con el servidor.", "err");
+
+      } catch {
+        setMessage("Error al subir el PDF.", "err");
       } finally {
         submitBtn.disabled = false;
       }
