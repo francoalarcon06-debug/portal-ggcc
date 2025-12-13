@@ -100,6 +100,21 @@
           </div>
         </div>
 
+        <!-- ✅ NUEVO: MONTO GC (auto + editable) -->
+        <label>Monto Gasto Común (CLP)</label>
+        <input
+          id="monto_gc"
+          name="monto_gc"
+          type="number"
+          inputmode="numeric"
+          min="0"
+          step="1"
+          placeholder="Ej: 125430"
+        />
+        <div class="hint" id="montoHint">
+          Monto detectado automáticamente desde el PDF (si es posible). Podés corregirlo si hace falta.
+        </div>
+
         <label>Edificio (opcional por ahora)</label>
         <input id="building" name="building_slug" placeholder="edificiomilano (opcional)" />
         <div class="hint">
@@ -108,7 +123,7 @@
 
         <button id="submitBtn" type="submit">Subir PDF</button>
         <div class="hint">
-          El archivo quedará asociado al período y departamento seleccionados.
+          El archivo quedará asociado al período, departamento y monto seleccionados.
         </div>
       </div>
 
@@ -117,8 +132,12 @@
   </div>
 
   <script>
-    // ✅ TU WEBHOOK (TEST)
+    // ✅ TU WEBHOOK (TEST) para guardar definitivo
     const N8N_WEBHOOK_URL = "https://n8n.proyectosfranco.cl/webhook-test/subir-ggcc";
+
+    // ✅ NUEVO: webhook "preview" (detecta monto desde el PDF y devuelve JSON)
+    // Si todavía no lo creaste, no pasa nada: el front seguirá funcionando sin autocompletar.
+    const N8N_PREVIEW_URL = "https://n8n.proyectosfranco.cl/webhook-test/preview-ggcc";
 
     const form = document.getElementById("f");
     const msg = document.getElementById("msg");
@@ -129,13 +148,15 @@
     const step2 = document.getElementById("step2");
     const periodInput = document.getElementById("period");
     const deptInput = document.getElementById("department_code");
+    const montoInput = document.getElementById("monto_gc");
+    const montoHint = document.getElementById("montoHint");
     const buildingInput = document.getElementById("building");
     const submitBtn = document.getElementById("submitBtn");
 
-    // A) Colilla_2025-10_dpto_308.pdf  (y acepta Colilla_2025-10_dpto_308 sin .pdf si el browser lo trae raro)
+    // A) Colilla_2025-10_dpto_308.pdf
     const RX_FORMAT_B = /^Colilla_(\d{4}-\d{2})_dpto_(\d{1,5})(?:\.pdf)?$/i;
 
-    // B) Colilla2025-10-edificiomilano-308.pdf (edificio opcional en el medio)
+    // B) Colilla2025-10-edificiomilano-308.pdf
     const RX_FORMAT_A = /^Colilla(\d{4}-\d{2})(?:-([a-z0-9_]+))?-(\d{1,5})(?:\.pdf)?$/i;
 
     function setMessage(text, className) {
@@ -153,30 +174,63 @@
 
       let m = base.match(RX_FORMAT_B);
       if (m) {
-        return {
-          ok: true,
-          format: "B",
-          period: m[1],
-          dept: m[2],
-          building: ""
-        };
+        return { ok: true, format: "B", period: m[1], dept: m[2], building: "" };
       }
 
       m = base.match(RX_FORMAT_A);
       if (m) {
-        return {
-          ok: true,
-          format: "A",
-          period: m[1],
-          building: m[2] || "",
-          dept: m[3]
-        };
+        return { ok: true, format: "A", period: m[1], building: m[2] || "", dept: m[3] };
       }
 
       return { ok: false, base };
     }
 
-    pdfInput.addEventListener("change", () => {
+    async function safeReadError(res) {
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("application/json")) {
+        try {
+          const j = await res.json();
+          return j.message || JSON.stringify(j);
+        } catch {
+          return "Respuesta JSON inválida del servidor.";
+        }
+      }
+      if (ct.includes("text/html")) return `Error ${res.status} (HTML). Revisá que el webhook exista y el workflow esté en "Listen".`;
+      return (await res.text()) || `Error ${res.status}`;
+    }
+
+    function normalizeCLPNumber(value) {
+      // deja solo números (por si pegás "125.430" o "$125.430")
+      const s = String(value ?? "").replace(/[^\d]/g, "");
+      return s ? Number(s) : null;
+    }
+
+    async function tryPreviewMonto(file) {
+      // intenta pedir al webhook de preview el monto detectado
+      // respuesta esperada:
+      // { "monto_gc": 125430 }  o { "monto_detectado": 125430 }
+      const fd = new FormData();
+      fd.append("pdf", file);
+      fd.append("original_filename", file.name);
+
+      try {
+        const res = await fetch(N8N_PREVIEW_URL, { method: "POST", body: fd });
+        if (!res.ok) return null;
+
+        const j = await res.json().catch(() => null);
+        if (!j || typeof j !== "object") return null;
+
+        const raw = j.monto_gc ?? j.monto_detectado ?? j.monto ?? null;
+        const n = normalizeCLPNumber(raw);
+        if (n === null || Number.isNaN(n)) return null;
+
+        return n;
+      } catch {
+        return null;
+      }
+    }
+
+    pdfInput.addEventListener("change", async () => {
       setMessage("", "");
       enableStep2(false);
 
@@ -206,10 +260,14 @@
         return;
       }
 
-      // Autocompletar campos
-      periodInput.value = parsed.period; // type month acepta YYYY-MM
+      // Autocompletar campos por nombre
+      periodInput.value = parsed.period;
       deptInput.value = parsed.dept;
       buildingInput.value = parsed.building;
+
+      // ✅ reset monto (lo intentamos detectar)
+      montoInput.value = "";
+      montoHint.textContent = "Detectando monto desde el PDF (si es posible)...";
 
       filenameHint.innerHTML = `
         <span class="ok"><b>Detectado desde el nombre:</b></span><br/>
@@ -220,22 +278,16 @@
 
       enableStep2(true);
       setMessage("Revisá los datos y subí el PDF.", "warn");
-    });
 
-    async function safeReadError(res) {
-      // Para que no te escupa TODO el HTML del Nginx en rojo
-      const ct = (res.headers.get("content-type") || "").toLowerCase();
-      if (ct.includes("application/json")) {
-        try {
-          const j = await res.json();
-          return j.message || JSON.stringify(j);
-        } catch {
-          return "Respuesta JSON inválida del servidor.";
-        }
+      // ✅ intentar autocompletar monto desde PDF (no bloquea si falla)
+      const monto = await tryPreviewMonto(file);
+      if (monto !== null) {
+        montoInput.value = String(monto);
+        montoHint.textContent = "Monto detectado automáticamente desde el PDF. Podés corregirlo si hace falta.";
+      } else {
+        montoHint.textContent = "No pude detectar el monto automáticamente. Ingresalo manualmente (podés corregirlo igual).";
       }
-      if (ct.includes("text/html")) return `Error ${res.status} (HTML). Revisá que el webhook exista y el workflow esté en "Listen".`;
-      return (await res.text()) || `Error ${res.status}`;
-    }
+    });
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -253,6 +305,10 @@
 
       const period = (periodInput.value || "").trim();
       const dept = (deptInput.value || "").trim();
+      const building = (buildingInput.value || "").trim();
+
+      // ✅ monto (opcional, pero recomendado)
+      const monto = normalizeCLPNumber(montoInput.value);
 
       if (!/^\d{4}-\d{2}$/.test(period)) {
         setMessage("Período inválido. Debe ser YYYY-MM (ej: 2025-10).", "err");
@@ -264,12 +320,20 @@
         return;
       }
 
+      // si querés hacerlo obligatorio: descomentá esto
+      // if (monto === null) {
+      //   setMessage("Ingresá el monto del gasto común (CLP).", "err");
+      //   return;
+      // }
+
       const fd = new FormData();
       fd.append("pdf", file);
       fd.append("period", period);
       fd.append("department_code", dept);
-      fd.append("building_slug", (buildingInput.value || "").trim());
+      fd.append("building_slug", building);
       fd.append("original_filename", file.name);
+
+      if (monto !== null) fd.append("monto_gc", String(monto));
 
       submitBtn.disabled = true;
       setMessage("Subiendo...", "");
@@ -290,6 +354,7 @@
         form.reset();
         enableStep2(false);
         filenameHint.textContent = "";
+        montoHint.textContent = "Monto detectado automáticamente desde el PDF (si es posible). Podés corregirlo si hace falta.";
       } catch (err) {
         setMessage("Error de conexión con el servidor.", "err");
       } finally {
@@ -299,4 +364,3 @@
   </script>
 </body>
 </html>
-
