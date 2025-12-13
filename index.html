@@ -89,7 +89,6 @@
         <div class="row">
           <div>
             <label>Período</label>
-            <!-- type="month" evita el drama del pattern y asegura formato -->
             <input id="period" name="period" type="month" required />
             <div class="hint">Ej: 2025-10</div>
           </div>
@@ -118,6 +117,7 @@
   </div>
 
   <script>
+    // ✅ TU WEBHOOK (TEST)
     const N8N_WEBHOOK_URL = "https://n8n.proyectosfranco.cl/webhook-test/subir-ggcc";
 
     const form = document.getElementById("f");
@@ -132,11 +132,11 @@
     const buildingInput = document.getElementById("building");
     const submitBtn = document.getElementById("submitBtn");
 
-    // A) Colilla_2025-10_dpto_308.pdf
-    const RX_FORMAT_B = /^Colilla_(\d{4}-\d{2})_dpto_(\d{1,5})\.pdf$/i;
+    // A) Colilla_2025-10_dpto_308.pdf  (y acepta Colilla_2025-10_dpto_308 sin .pdf si el browser lo trae raro)
+    const RX_FORMAT_B = /^Colilla_(\d{4}-\d{2})_dpto_(\d{1,5})(?:\.pdf)?$/i;
 
-    // B) Colilla2025-10-edificiomilano-308.pdf  (edificio opcional en el medio)
-    const RX_FORMAT_A = /^Colilla(\d{4}-\d{2})(?:-([a-z0-9_]+))?-(\d{1,5})\.pdf$/i;
+    // B) Colilla2025-10-edificiomilano-308.pdf (edificio opcional en el medio)
+    const RX_FORMAT_A = /^Colilla(\d{4}-\d{2})(?:-([a-z0-9_]+))?-(\d{1,5})(?:\.pdf)?$/i;
 
     function setMessage(text, className) {
       msg.textContent = text;
@@ -149,7 +149,6 @@
     }
 
     function parseFilename(name) {
-      // Limpieza rápida por si viene con path raro (algunos navegadores antiguos)
       const base = (name || "").split(/[/\\]/).pop();
 
       let m = base.match(RX_FORMAT_B);
@@ -157,9 +156,9 @@
         return {
           ok: true,
           format: "B",
-          period: m[1],        // YYYY-MM
-          dept: m[2],          // 308
-          building: ""         // no viene en formato B
+          period: m[1],
+          dept: m[2],
+          building: ""
         };
       }
 
@@ -223,6 +222,21 @@
       setMessage("Revisá los datos y subí el PDF.", "warn");
     });
 
+    async function safeReadError(res) {
+      // Para que no te escupa TODO el HTML del Nginx en rojo
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("application/json")) {
+        try {
+          const j = await res.json();
+          return j.message || JSON.stringify(j);
+        } catch {
+          return "Respuesta JSON inválida del servidor.";
+        }
+      }
+      if (ct.includes("text/html")) return `Error ${res.status} (HTML). Revisá que el webhook exista y el workflow esté en "Listen".`;
+      return (await res.text()) || `Error ${res.status}`;
+    }
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -237,7 +251,6 @@
         return;
       }
 
-      // Validaciones mínimas
       const period = (periodInput.value || "").trim();
       const dept = (deptInput.value || "").trim();
 
@@ -251,30 +264,22 @@
         return;
       }
 
-      // Construimos FormData manual para asegurarnos del orden lógico
       const fd = new FormData();
       fd.append("pdf", file);
       fd.append("period", period);
       fd.append("department_code", dept);
       fd.append("building_slug", (buildingInput.value || "").trim());
-
-      // Extra: mandamos también el nombre original para auditoría
       fd.append("original_filename", file.name);
 
-      // UX
       submitBtn.disabled = true;
       setMessage("Subiendo...", "");
 
       try {
-        const res = await fetch(N8N_WEBHOOK_URL, {
-          method: "POST",
-          body: fd
-        });
-
-        const text = await res.text();
+        const res = await fetch(N8N_WEBHOOK_URL, { method: "POST", body: fd });
 
         if (!res.ok) {
-          setMessage("Error: " + text, "err");
+          const errMsg = await safeReadError(res);
+          setMessage("Error: " + errMsg, "err");
           submitBtn.disabled = false;
           return;
         }
@@ -294,3 +299,4 @@
   </script>
 </body>
 </html>
+
