@@ -100,16 +100,14 @@
           </div>
         </div>
 
-        <!-- ✅ NUEVO: MONTO GC (auto + editable) -->
+        <!-- ✅ MONTO GC (auto + editable) -->
         <label>Monto Gasto Común (CLP)</label>
         <input
           id="monto_gc"
           name="monto_gc"
-          type="number"
+          type="text"
           inputmode="numeric"
-          min="0"
-          step="1"
-          placeholder="Ej: 125430"
+          placeholder="Ej: 125430 (también podés pegar 125.430)"
         />
         <div class="hint" id="montoHint">
           Monto detectado automáticamente desde el PDF (si es posible). Podés corregirlo si hace falta.
@@ -135,7 +133,7 @@
     // ✅ TU WEBHOOK (TEST) para guardar definitivo
     const N8N_WEBHOOK_URL = "https://n8n.proyectosfranco.cl/webhook-test/subir-ggcc";
 
-    // ✅ NUEVO: webhook "preview" (detecta monto desde el PDF y devuelve JSON)
+    // ✅ webhook "preview" (detecta monto desde el PDF y devuelve JSON)
     // Si todavía no lo creaste, no pasa nada: el front seguirá funcionando sin autocompletar.
     const N8N_PREVIEW_URL = "https://n8n.proyectosfranco.cl/webhook-test/preview-ggcc";
 
@@ -200,15 +198,11 @@
     }
 
     function normalizeCLPNumber(value) {
-      // deja solo números (por si pegás "125.430" o "$125.430")
       const s = String(value ?? "").replace(/[^\d]/g, "");
       return s ? Number(s) : null;
     }
 
     async function tryPreviewMonto(file) {
-      // intenta pedir al webhook de preview el monto detectado
-      // respuesta esperada:
-      // { "monto_gc": 125430 }  o { "monto_detectado": 125430 }
       const fd = new FormData();
       fd.append("pdf", file);
       fd.append("original_filename", file.name);
@@ -260,12 +254,10 @@
         return;
       }
 
-      // Autocompletar campos por nombre
       periodInput.value = parsed.period;
       deptInput.value = parsed.dept;
       buildingInput.value = parsed.building;
 
-      // ✅ reset monto (lo intentamos detectar)
       montoInput.value = "";
       montoHint.textContent = "Detectando monto desde el PDF (si es posible)...";
 
@@ -279,7 +271,6 @@
       enableStep2(true);
       setMessage("Revisá los datos y subí el PDF.", "warn");
 
-      // ✅ intentar autocompletar monto desde PDF (no bloquea si falla)
       const monto = await tryPreviewMonto(file);
       if (monto !== null) {
         montoInput.value = String(monto);
@@ -306,8 +297,6 @@
       const period = (periodInput.value || "").trim();
       const dept = (deptInput.value || "").trim();
       const building = (buildingInput.value || "").trim();
-
-      // ✅ monto (opcional, pero recomendado)
       const monto = normalizeCLPNumber(montoInput.value);
 
       if (!/^\d{4}-\d{2}$/.test(period)) {
@@ -319,12 +308,6 @@
         setMessage("Departamento inválido. Usa solo números (ej: 308).", "err");
         return;
       }
-
-      // si querés hacerlo obligatorio: descomentá esto
-      // if (monto === null) {
-      //   setMessage("Ingresá el monto del gasto común (CLP).", "err");
-      //   return;
-      // }
 
       const fd = new FormData();
       fd.append("pdf", file);
@@ -350,7 +333,6 @@
 
         setMessage("✅ PDF cargado correctamente.", "ok");
 
-        // reset
         form.reset();
         enableStep2(false);
         filenameHint.textContent = "";
