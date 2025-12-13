@@ -95,8 +95,8 @@
 
     <!-- NAV -->
     <nav class="nav">
-      <a href="index.html" class="active">Subir GGCC</a>
-      <a href="departamentos.html">Departamentos</a>
+      <a href="./index.html" data-page="index">Subir GGCC</a>
+      <a href="./departamentos.html" data-page="departamentos">Departamentos</a>
     </nav>
 
     <h1>Subir Gastos Comunes</h1>
@@ -142,6 +142,17 @@
   </div>
 
   <script>
+    // ===== NAV ACTIVE AUTOMÁTICO =====
+    (function setActiveNav() {
+      const path = (location.pathname || "").toLowerCase();
+      const isDept = path.endsWith("/departamentos.html") || path.includes("departamentos.html");
+      const current = isDept ? "departamentos" : "index";
+
+      document.querySelectorAll(".nav a").forEach(a => {
+        a.classList.toggle("active", a.dataset.page === current);
+      });
+    })();
+
     const WEBHOOK_URL = "https://n8n.proyectosfranco.cl/webhook-test/subir-ggcc";
 
     const form = document.getElementById("f");
@@ -254,4 +265,5 @@
   </script>
 </body>
 </html>
+
 
