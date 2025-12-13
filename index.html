@@ -16,18 +16,20 @@
     .card {
       background: #fff;
       width: 100%;
-      max-width: 640px;
+      max-width: 720px;
       padding: 28px;
       border-radius: 10px;
       box-shadow: 0 10px 30px rgba(0,0,0,.08);
     }
     h1 { margin-top: 0; }
+    .step-title { margin: 18px 0 6px; font-weight: 800; }
     label { display:block; margin-top:16px; font-weight:600; }
     input {
       width: 100%;
       margin-top: 6px;
       padding: 10px;
       font-size: 15px;
+      box-sizing: border-box;
     }
     button {
       margin-top: 22px;
@@ -38,29 +40,77 @@
     }
     .ok { color: #0a7a0a; margin-top: 14px; }
     .err { color: #b00020; margin-top: 14px; }
-    .hint { font-size: 13px; color: #555; margin-top: 8px; }
+    .warn { color: #8a5b00; margin-top: 14px; }
+    .hint { font-size: 13px; color: #555; margin-top: 8px; line-height: 1.35; }
+    .box {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      padding: 12px;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 640px) {
+      body { padding: 18px; }
+      .row { grid-template-columns: 1fr; }
+    }
+    .disabled {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+    code { background: #eef2ff; padding: 2px 6px; border-radius: 6px; }
   </style>
 </head>
+
 <body>
   <div class="card">
     <h1>Subir Gastos Comunes</h1>
 
+    <div class="hint">
+      <b>Formato recomendado:</b> <code>Colilla_2025-10_dpto_308.pdf</code><br/>
+      <b>También acepta:</b> <code>Colilla2025-10-edificiomilano-308.pdf</code><br/>
+      Se extrae automáticamente: <b>Período</b> + <b>Departamento</b> (y si existe, un <b>identificador</b> de edificio).
+    </div>
+
     <form id="f">
-      <label>Edificio (ID)</label>
-      <input name="building_id" required placeholder="1" />
+      <div class="step-title">1) Seleccioná el PDF</div>
+      <div class="box">
+        <label>Archivo PDF</label>
+        <input id="pdf" name="pdf" type="file" accept="application/pdf" required />
+        <div class="hint" id="filenameHint"></div>
+      </div>
 
-      <label>Período (YYYY-MM)</label>
-      <input name="period" required placeholder="2025-10" pattern="\\d{4}-\\d{2}" />
+      <div class="step-title">2) Verificá / corregí datos</div>
+      <div id="step2" class="box disabled">
+        <div class="row">
+          <div>
+            <label>Período</label>
+            <!-- type="month" evita el drama del pattern y asegura formato -->
+            <input id="period" name="period" type="month" required />
+            <div class="hint">Ej: 2025-10</div>
+          </div>
 
-      <label>Departamento</label>
-      <input name="department_code" required placeholder="308" />
+          <div>
+            <label>Departamento</label>
+            <input id="department_code" name="department_code" required placeholder="308" inputmode="numeric" />
+            <div class="hint">Ej: 308</div>
+          </div>
+        </div>
 
-      <label>Archivo PDF</label>
-      <input name="pdf" type="file" accept="application/pdf" required />
+        <label>Edificio (opcional por ahora)</label>
+        <input id="building" name="building_slug" placeholder="edificiomilano (opcional)" />
+        <div class="hint">
+          Si después querés que sea obligatorio y/o que sea un ID, lo cambiamos. Por ahora lo dejamos opcional.
+        </div>
 
-      <button type="submit">Subir PDF</button>
-      <div class="hint">
-        El archivo quedará asociado al departamento y período seleccionados.
+        <button id="submitBtn" type="submit">Subir PDF</button>
+        <div class="hint">
+          El archivo quedará asociado al período y departamento seleccionados.
+        </div>
       </div>
 
       <div id="msg"></div>
@@ -73,19 +123,147 @@
     const form = document.getElementById("f");
     const msg = document.getElementById("msg");
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      msg.textContent = "Subiendo...";
-      msg.className = "";
+    const pdfInput = document.getElementById("pdf");
+    const filenameHint = document.getElementById("filenameHint");
 
-      const fd = new FormData(form);
-      const file = fd.get("pdf");
+    const step2 = document.getElementById("step2");
+    const periodInput = document.getElementById("period");
+    const deptInput = document.getElementById("department_code");
+    const buildingInput = document.getElementById("building");
+    const submitBtn = document.getElementById("submitBtn");
 
-      if (!file || file.type !== "application/pdf") {
-        msg.textContent = "Error: selecciona un PDF válido.";
-        msg.className = "err";
+    // A) Colilla_2025-10_dpto_308.pdf
+    const RX_FORMAT_B = /^Colilla_(\d{4}-\d{2})_dpto_(\d{1,5})\.pdf$/i;
+
+    // B) Colilla2025-10-edificiomilano-308.pdf  (edificio opcional en el medio)
+    const RX_FORMAT_A = /^Colilla(\d{4}-\d{2})(?:-([a-z0-9_]+))?-(\d{1,5})\.pdf$/i;
+
+    function setMessage(text, className) {
+      msg.textContent = text;
+      msg.className = className || "";
+    }
+
+    function enableStep2(enable) {
+      if (enable) step2.classList.remove("disabled");
+      else step2.classList.add("disabled");
+    }
+
+    function parseFilename(name) {
+      // Limpieza rápida por si viene con path raro (algunos navegadores antiguos)
+      const base = (name || "").split(/[/\\]/).pop();
+
+      let m = base.match(RX_FORMAT_B);
+      if (m) {
+        return {
+          ok: true,
+          format: "B",
+          period: m[1],        // YYYY-MM
+          dept: m[2],          // 308
+          building: ""         // no viene en formato B
+        };
+      }
+
+      m = base.match(RX_FORMAT_A);
+      if (m) {
+        return {
+          ok: true,
+          format: "A",
+          period: m[1],
+          building: m[2] || "",
+          dept: m[3]
+        };
+      }
+
+      return { ok: false, base };
+    }
+
+    pdfInput.addEventListener("change", () => {
+      setMessage("", "");
+      enableStep2(false);
+
+      const file = pdfInput.files && pdfInput.files[0];
+      if (!file) {
+        filenameHint.textContent = "";
         return;
       }
+
+      if (file.type !== "application/pdf") {
+        filenameHint.textContent = "";
+        setMessage("Error: seleccioná un PDF válido.", "err");
+        pdfInput.value = "";
+        return;
+      }
+
+      const parsed = parseFilename(file.name);
+
+      if (!parsed.ok) {
+        filenameHint.innerHTML = `
+          <span class="warn"><b>Nombre no reconocido.</b></span><br/>
+          Renombrá el archivo a uno de estos formatos:<br/>
+          - <code>Colilla_2025-10_dpto_308.pdf</code><br/>
+          - <code>Colilla2025-10-edificiomilano-308.pdf</code>
+        `;
+        setMessage("No puedo extraer datos del nombre. Renombrá el archivo y probá de nuevo.", "err");
+        return;
+      }
+
+      // Autocompletar campos
+      periodInput.value = parsed.period; // type month acepta YYYY-MM
+      deptInput.value = parsed.dept;
+      buildingInput.value = parsed.building;
+
+      filenameHint.innerHTML = `
+        <span class="ok"><b>Detectado desde el nombre:</b></span><br/>
+        Período: <code>${parsed.period}</code> &nbsp;|&nbsp;
+        Depto: <code>${parsed.dept}</code>
+        ${parsed.building ? `&nbsp;|&nbsp; Edificio: <code>${parsed.building}</code>` : ""}
+      `;
+
+      enableStep2(true);
+      setMessage("Revisá los datos y subí el PDF.", "warn");
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const file = pdfInput.files && pdfInput.files[0];
+      if (!file) {
+        setMessage("Seleccioná un PDF antes de subir.", "err");
+        return;
+      }
+
+      if (file.type !== "application/pdf") {
+        setMessage("Error: seleccioná un PDF válido.", "err");
+        return;
+      }
+
+      // Validaciones mínimas
+      const period = (periodInput.value || "").trim();
+      const dept = (deptInput.value || "").trim();
+
+      if (!/^\d{4}-\d{2}$/.test(period)) {
+        setMessage("Período inválido. Debe ser YYYY-MM (ej: 2025-10).", "err");
+        return;
+      }
+
+      if (!/^\d{1,5}$/.test(dept)) {
+        setMessage("Departamento inválido. Usa solo números (ej: 308).", "err");
+        return;
+      }
+
+      // Construimos FormData manual para asegurarnos del orden lógico
+      const fd = new FormData();
+      fd.append("pdf", file);
+      fd.append("period", period);
+      fd.append("department_code", dept);
+      fd.append("building_slug", (buildingInput.value || "").trim());
+
+      // Extra: mandamos también el nombre original para auditoría
+      fd.append("original_filename", file.name);
+
+      // UX
+      submitBtn.disabled = true;
+      setMessage("Subiendo...", "");
 
       try {
         const res = await fetch(N8N_WEBHOOK_URL, {
@@ -96,17 +274,21 @@
         const text = await res.text();
 
         if (!res.ok) {
-          msg.textContent = "Error: " + text;
-          msg.className = "err";
+          setMessage("Error: " + text, "err");
+          submitBtn.disabled = false;
           return;
         }
 
-        msg.textContent = "✅ PDF cargado correctamente.";
-        msg.className = "ok";
+        setMessage("✅ PDF cargado correctamente.", "ok");
+
+        // reset
         form.reset();
+        enableStep2(false);
+        filenameHint.textContent = "";
       } catch (err) {
-        msg.textContent = "Error de conexión con el servidor.";
-        msg.className = "err";
+        setMessage("Error de conexión con el servidor.", "err");
+      } finally {
+        submitBtn.disabled = false;
       }
     });
   </script>
