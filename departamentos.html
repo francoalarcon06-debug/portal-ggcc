@@ -86,6 +86,12 @@
       font-weight: 700;
     }
 
+    /* Centrar columna Acciones */
+    th.actions-col,
+    td.actions-col {
+      text-align: center;
+    }
+
     tr:not(:last-child) td {
       border-bottom: 1px solid #eee;
     }
@@ -93,6 +99,7 @@
     .actions {
       display: flex;
       gap: 8px;
+      justify-content: center; /* botones centrados */
       flex-wrap: wrap;
     }
 
@@ -135,7 +142,7 @@
     <div class="muted">
       Listado de departamentos y su propietario.
       <br />
-      • <b>Ver GGCC</b>: historial de gastos comunes del depto  
+      • <b>Ver G.G.C.C</b>: historial de gastos comunes del depto  
       <br />
       • <b>Teléfonos</b>: números autorizados para usar el bot
     </div>
@@ -146,7 +153,7 @@
           <tr>
             <th>Departamento</th>
             <th>Propietario</th>
-            <th>Acciones</th>
+            <th class="actions-col">Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -188,11 +195,11 @@
           tr.innerHTML = `
             <td>${escapeHtml(String(depto))}</td>
             <td>${escapeHtml(String(nombre))}</td>
-            <td>
+            <td class="actions-col">
               <div class="actions">
                 <button class="btn" type="button"
                   onclick="verGGCC('${safe(depto)}')">
-                  Ver GGCC
+                  Ver G.G.C.C
                 </button>
 
                 <button class="btn secondary" type="button"
@@ -213,18 +220,11 @@
     }
 
     function verGGCC(departamento) {
-      alert("Ver GGCC del departamento " + departamento);
-      // próximo paso:
-      // fetch GGCC por depto
-      // mostrar tabla / modal
+      alert("Ver G.G.C.C del departamento " + departamento);
     }
 
     function gestionarTelefonos(departamento) {
       alert("Gestionar teléfonos del departamento " + departamento);
-      // próximo paso:
-      // listar teléfonos
-      // agregar
-      // eliminar
     }
 
     function safe(v) {
@@ -244,4 +244,3 @@
   </script>
 </body>
 </html>
-
