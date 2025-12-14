@@ -6,126 +6,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <style>
-    body {
-      font-family: system-ui, Arial, sans-serif;
-      background: #f6f7f9;
-      margin: 0;
-      padding: 40px;
-      display: flex;
-      justify-content: center;
-    }
+    body{font-family:system-ui,Arial,sans-serif;background:#f6f7f9;margin:0;padding:40px;display:flex;justify-content:center}
+    .card{background:#fff;width:100%;max-width:720px;padding:28px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+    .nav{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+    .nav a{text-decoration:none;padding:8px 12px;border-radius:8px;background:#e5e7eb;color:#111;font-weight:700;font-size:14px}
+    .nav a:hover{background:#d1d5db}
+    .nav a.active{background:#2563eb;color:#fff}
+    h1{margin-top:0;margin-bottom:14px}
+    .box{background:#f9fafb;border:1px solid #e5e7eb;padding:12px;border-radius:10px}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden}
+    th,td{padding:14px 16px;text-align:left;vertical-align:middle}
+    th{background:#f0f2f5;font-weight:700}
+    th.actions-col,td.actions-col{text-align:center}
+    tr:not(:last-child) td{border-bottom:1px solid #eee}
+    .actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+    .btn{padding:6px 10px;border:none;border-radius:6px;cursor:pointer;background:#2563eb;color:#fff;font-weight:600;font-size:13px}
+    .btn.secondary{background:#374151}
+    .btn.danger{background:#b00020}
+    .btn:hover{opacity:.9}
+    @media (max-width:640px){body{padding:18px}th,td{padding:12px}}
 
-    .card {
-      background: #fff;
-      width: 100%;
-      max-width: 720px;
-      padding: 28px;
-      border-radius: 10px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.08);
-    }
-
-    /* NAV */
-    .nav {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 18px;
-      flex-wrap: wrap;
-    }
-    .nav a {
-      text-decoration: none;
-      padding: 8px 12px;
-      border-radius: 8px;
-      background: #e5e7eb;
-      color: #111;
-      font-weight: 700;
-      font-size: 14px;
-    }
-    .nav a:hover {
-      background: #d1d5db;
-    }
-    .nav a.active {
-      background: #2563eb;
-      color: #fff;
-    }
-
-    h1 {
-      margin-top: 0;
-      margin-bottom: 14px;
-    }
-
-    .box {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      padding: 12px;
-      border-radius: 10px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: #fff;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    th, td {
-      padding: 14px 16px;
-      text-align: left;
-      vertical-align: middle;
-    }
-
-    th {
-      background: #f0f2f5;
-      font-weight: 700;
-    }
-
-    /* Centrar columna Acciones */
-    th.actions-col,
-    td.actions-col {
-      text-align: center;
-    }
-
-    tr:not(:last-child) td {
-      border-bottom: 1px solid #eee;
-    }
-
-    .actions {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-
-    .btn {
-      padding: 6px 10px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      background: #2563eb;
-      color: #fff;
-      font-weight: 600;
-      font-size: 13px;
-    }
-
-    .btn.secondary {
-      background: #374151;
-    }
-
-    .btn:hover {
-      opacity: 0.9;
-    }
-
-    @media (max-width: 640px) {
-      body { padding: 18px; }
-      th, td { padding: 12px; }
-    }
+    /* MODAL */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:16px}
+    .overlay.show{display:flex}
+    .modal{width:100%;max-width:560px;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
+    .modal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #eee}
+    .modal-title{font-weight:800}
+    .modal-body{padding:14px 16px}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .input{flex:1;min-width:220px;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px}
+    .list{margin-top:12px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
+    .item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#fff}
+    .item:not(:last-child){border-bottom:1px solid #eee}
+    .muted{color:#666;font-size:13px;margin-top:8px}
   </style>
 </head>
 
 <body>
   <div class="card">
 
-    <!-- NAV -->
     <nav class="nav">
       <a href="index.html">Subir GGCC</a>
       <a href="departamentos.html" class="active">Departamentos</a>
@@ -143,17 +62,42 @@
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td colspan="3">Cargando...</td>
-          </tr>
+          <tr><td colspan="3">Cargando...</td></tr>
         </tbody>
       </table>
     </div>
 
   </div>
 
+  <!-- Modal Teléfonos -->
+  <div id="overlay" class="overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <div class="modal-title" id="modalTitle">Teléfonos</div>
+        <button class="btn secondary" type="button" onclick="cerrarModal()">Cerrar</button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <input id="telInput" class="input" placeholder="Ej: +56912345678" />
+          <button class="btn" type="button" onclick="agregarTelefono()">Agregar</button>
+        </div>
+        <div id="telMsg" class="muted"></div>
+        <div id="telList" class="list"></div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_URL = "https://n8n.proyectosfranco.cl/webhook-test/departamentos";
+    const TEL_URL = "https://n8n.proyectosfranco.cl/webhook-test/telefonos";
+
+    const overlay = document.getElementById("overlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const telInput = document.getElementById("telInput");
+    const telList = document.getElementById("telList");
+    const telMsg = document.getElementById("telMsg");
+
+    let deptoActual = null;
 
     async function cargarDepartamentos() {
       const tbody = document.querySelector("#tabla tbody");
@@ -183,15 +127,8 @@
             <td>${escapeHtml(String(nombre))}</td>
             <td class="actions-col">
               <div class="actions">
-                <button class="btn" type="button"
-                  onclick="verGGCC('${safe(depto)}')">
-                  Ver G.G.C.C
-                </button>
-
-                <button class="btn secondary" type="button"
-                  onclick="gestionarTelefonos('${safe(depto)}')">
-                  Teléfonos
-                </button>
+                <button class="btn" type="button" onclick="verGGCC('${safe(depto)}')">Ver G.G.C.C</button>
+                <button class="btn secondary" type="button" onclick="gestionarTelefonos('${safe(depto)}')">Teléfonos</button>
               </div>
             </td>
           `;
@@ -209,12 +146,94 @@
       alert("Ver G.G.C.C del departamento " + departamento);
     }
 
-    function gestionarTelefonos(departamento) {
-      alert("Gestionar teléfonos del departamento " + departamento);
+    // ===== TELÉFONOS =====
+    async function gestionarTelefonos(departamento) {
+      deptoActual = String(departamento);
+      modalTitle.textContent = "Teléfonos — Depto " + deptoActual;
+      telInput.value = "";
+      telMsg.textContent = "Cargando teléfonos...";
+      telList.innerHTML = "";
+      abrirModal();
+
+      try {
+        const res = await fetch(`${TEL_URL}?departamento=${encodeURIComponent(deptoActual)}`);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const raw = await res.json();
+
+        const telefonos = Array.isArray(raw) ? raw : (raw?.telefonos ?? []);
+        renderTelefonos(telefonos);
+        telMsg.textContent = telefonos.length ? "" : "Este departamento no tiene teléfonos registrados.";
+      } catch (e) {
+        telMsg.textContent = "No se pudieron cargar los teléfonos (revisá el webhook / CORS).";
+        console.error(e);
+      }
     }
 
+    function renderTelefonos(telefonos) {
+      telList.innerHTML = "";
+      (telefonos || []).forEach(t => {
+        const tel = String(t?.telefono ?? t ?? "").trim();
+        if (!tel) return;
+
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML = `
+          <div>${escapeHtml(tel)}</div>
+          <button class="btn danger" type="button" onclick="eliminarTelefono('${safe(tel)}')">Eliminar</button>
+        `;
+        telList.appendChild(div);
+      });
+
+      if (!telList.children.length) {
+        telList.innerHTML = `<div class="item"><div class="muted">Sin teléfonos</div></div>`;
+      }
+    }
+
+    async function agregarTelefono() {
+      const tel = telInput.value.trim();
+      if (!deptoActual) return;
+      if (!tel) { telMsg.textContent = "Escribí un teléfono primero."; return; }
+
+      telMsg.textContent = "Agregando...";
+      try {
+        const res = await fetch(TEL_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ departamento: deptoActual, telefono: tel })
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        await gestionarTelefonos(deptoActual);
+      } catch (e) {
+        telMsg.textContent = "No se pudo agregar (quizás tu workflow aún no soporta POST).";
+        console.error(e);
+      }
+    }
+
+    async function eliminarTelefono(telefono) {
+      if (!deptoActual) return;
+      telMsg.textContent = "Eliminando...";
+      try {
+        const res = await fetch(TEL_URL, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ departamento: deptoActual, telefono })
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        await gestionarTelefonos(deptoActual);
+      } catch (e) {
+        telMsg.textContent = "No se pudo eliminar (quizás tu workflow aún no soporta DELETE).";
+        console.error(e);
+      }
+    }
+
+    function abrirModal(){ overlay.classList.add("show"); overlay.setAttribute("aria-hidden","false"); }
+    function cerrarModal(){ overlay.classList.remove("show"); overlay.setAttribute("aria-hidden","true"); deptoActual=null; }
+
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) cerrarModal(); });
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarModal(); });
+
     function safe(v) {
-      return String(v).replace(/'/g, "\\'"); // Escapar comillas para evitar errores de sintaxis.
+      return String(v).replace(/'/g, "\\'");
     }
 
     function escapeHtml(str) {
