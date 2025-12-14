@@ -44,7 +44,6 @@
 
 <body>
   <div class="card">
-
     <nav class="nav">
       <a href="index.html">Subir GGCC</a>
       <a href="departamentos.html" class="active">Departamentos</a>
@@ -66,7 +65,6 @@
         </tbody>
       </table>
     </div>
-
   </div>
 
   <!-- Modal Teléfonos -->
@@ -89,7 +87,9 @@
 
   <script>
     const API_URL = "https://n8n.proyectosfranco.cl/webhook-test/departamentos";
-    const TEL_URL = "https://n8n.proyectosfranco.cl/webhook-test/telefonos";
+    const TEL_LISTAR_URL = "https://n8n.proyectosfranco.cl/webhook-test/telefonos";
+    const TEL_AGREGAR_URL = "https://n8n.proyectosfranco.cl/webhook-test/telefonos/agregar";
+    const TEL_ELIMINAR_URL = "https://n8n.proyectosfranco.cl/webhook-test/telefonos/eliminar"; // (si aún no existe, lo armamos después)
 
     const overlay = document.getElementById("overlay");
     const modalTitle = document.getElementById("modalTitle");
@@ -102,11 +102,9 @@
     async function cargarDepartamentos() {
       const tbody = document.querySelector("#tabla tbody");
       tbody.innerHTML = "<tr><td colspan='3'>Cargando...</td></tr>";
-
       try {
         const res = await fetch(API_URL);
         if (!res.ok) throw new Error("HTTP " + res.status);
-
         const data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
@@ -115,13 +113,10 @@
         }
 
         tbody.innerHTML = "";
-
         data.forEach(row => {
           const depto = row.departamento ?? "";
           const nombre = row.nombre ?? "";
-
           const tr = document.createElement("tr");
-
           tr.innerHTML = `
             <td>${escapeHtml(String(depto))}</td>
             <td>${escapeHtml(String(nombre))}</td>
@@ -132,10 +127,8 @@
               </div>
             </td>
           `;
-
           tbody.appendChild(tr);
         });
-
       } catch (err) {
         tbody.innerHTML = "<tr><td colspan='3'>Error al cargar datos</td></tr>";
         console.error(err);
@@ -147,6 +140,14 @@
     }
 
     // ===== TELÉFONOS =====
+    function normalizarTelefonos(raw) {
+      const arr = Array.isArray(raw) ? raw : (raw?.telefonos ?? []);
+      return (arr || [])
+        .map(x => (x && typeof x === "object") ? (x.chat_id ?? x.telefono ?? x.phone ?? null) : x)
+        .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
+        .map(v => String(v).trim());
+    }
+
     async function gestionarTelefonos(departamento) {
       deptoActual = String(departamento);
       modalTitle.textContent = "Teléfonos — Depto " + deptoActual;
@@ -154,27 +155,27 @@
       telMsg.textContent = "Cargando teléfonos...";
       telList.innerHTML = "";
       abrirModal();
+      await cargarTelefonos();
+    }
 
+    async function cargarTelefonos() {
       try {
-        const res = await fetch(`${TEL_URL}?departamento=${encodeURIComponent(deptoActual)}`);
+        const res = await fetch(`${TEL_LISTAR_URL}?departamento=${encodeURIComponent(deptoActual)}`);
         if (!res.ok) throw new Error("HTTP " + res.status);
         const raw = await res.json();
-
-        const telefonos = Array.isArray(raw) ? raw : (raw?.telefonos ?? []);
+        const telefonos = normalizarTelefonos(raw);
         renderTelefonos(telefonos);
         telMsg.textContent = telefonos.length ? "" : "Este departamento no tiene teléfonos registrados.";
       } catch (e) {
         telMsg.textContent = "No se pudieron cargar los teléfonos (revisá el webhook / CORS).";
+        telList.innerHTML = `<div class="item"><div class="muted">Sin teléfonos</div></div>`;
         console.error(e);
       }
     }
 
     function renderTelefonos(telefonos) {
       telList.innerHTML = "";
-      (telefonos || []).forEach(t => {
-        const tel = String(t?.telefono ?? t ?? "").trim();
-        if (!tel) return;
-
+      (telefonos || []).forEach(tel => {
         const div = document.createElement("div");
         div.className = "item";
         div.innerHTML = `
@@ -183,7 +184,6 @@
         `;
         telList.appendChild(div);
       });
-
       if (!telList.children.length) {
         telList.innerHTML = `<div class="item"><div class="muted">Sin teléfonos</div></div>`;
       }
@@ -196,15 +196,21 @@
 
       telMsg.textContent = "Agregando...";
       try {
-        const res = await fetch(TEL_URL, {
+        const res = await fetch(TEL_AGREGAR_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ departamento: deptoActual, telefono: tel })
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
-        await gestionarTelefonos(deptoActual);
+
+        const raw = await res.json();               // ideal: que el workflow devuelva la lista final
+        const telefonos = normalizarTelefonos(raw); // soporta raw como array o como {telefonos:[]}
+        telInput.value = "";
+        renderTelefonos(telefonos);
+        telMsg.textContent = "Listo ✅";
+        if (!telefonos.length) await cargarTelefonos(); // fallback por si el workflow no devuelve lista
       } catch (e) {
-        telMsg.textContent = "No se pudo agregar (quizás tu workflow aún no soporta POST).";
+        telMsg.textContent = "No se pudo agregar (revisá el workflow /telefonos/agregar).";
         console.error(e);
       }
     }
@@ -213,15 +219,20 @@
       if (!deptoActual) return;
       telMsg.textContent = "Eliminando...";
       try {
-        const res = await fetch(TEL_URL, {
-          method: "DELETE",
+        const res = await fetch(TEL_ELIMINAR_URL, {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ departamento: deptoActual, telefono })
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
-        await gestionarTelefonos(deptoActual);
+
+        const raw = await res.json();               // ideal: que devuelva la lista final
+        const telefonos = normalizarTelefonos(raw);
+        renderTelefonos(telefonos);
+        telMsg.textContent = "Eliminado ✅";
+        if (!telefonos.length) await cargarTelefonos(); // fallback
       } catch (e) {
-        telMsg.textContent = "No se pudo eliminar (quizás tu workflow aún no soporta DELETE).";
+        telMsg.textContent = "No se pudo eliminar (si aún no existe /telefonos/eliminar, lo armamos).";
         console.error(e);
       }
     }
@@ -232,17 +243,10 @@
     overlay.addEventListener("click", (e) => { if (e.target === overlay) cerrarModal(); });
     window.addEventListener("keydown", (e) => { if (e.key === "Escape") cerrarModal(); });
 
-    function safe(v) {
-      return String(v).replace(/'/g, "\\'");
-    }
-
+    function safe(v) { return String(v).replace(/'/g, "\\'"); }
     function escapeHtml(str) {
-      return str
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+      return str.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+                .replaceAll('"',"&quot;").replaceAll("'","&#039;");
     }
 
     cargarDepartamentos();
