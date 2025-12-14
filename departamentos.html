@@ -89,7 +89,7 @@
     const API_URL = "https://n8n.proyectosfranco.cl/webhook-test/departamentos";
     const TEL_LISTAR_URL = "https://n8n.proyectosfranco.cl/webhook-test/telefonos";
     const TEL_AGREGAR_URL = "https://n8n.proyectosfranco.cl/webhook-test/telefonos/agregar";
-    const TEL_ELIMINAR_URL = "https://n8n.proyectosfranco.cl/webhook-test/telefonos/eliminar"; // (si aún no existe, lo armamos después)
+    const TEL_ELIMINAR_URL = "https://n8n.proyectosfranco.cl/webhook-test/telefonos/eliminar";
 
     const overlay = document.getElementById("overlay");
     const modalTitle = document.getElementById("modalTitle");
@@ -184,6 +184,7 @@
         `;
         telList.appendChild(div);
       });
+
       if (!telList.children.length) {
         telList.innerHTML = `<div class="item"><div class="muted">Sin teléfonos</div></div>`;
       }
@@ -203,36 +204,38 @@
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
 
-        const raw = await res.json();               // ideal: que el workflow devuelva la lista final
-        const telefonos = normalizarTelefonos(raw); // soporta raw como array o como {telefonos:[]}
+        const raw = await res.json();
+        const telefonos = normalizarTelefonos(raw);
         telInput.value = "";
         renderTelefonos(telefonos);
         telMsg.textContent = "Listo ✅";
-        if (!telefonos.length) await cargarTelefonos(); // fallback por si el workflow no devuelve lista
+        if (!telefonos.length) await cargarTelefonos(); // fallback
       } catch (e) {
         telMsg.textContent = "No se pudo agregar (revisá el workflow /telefonos/agregar).";
         console.error(e);
       }
     }
 
+    // ✅ Conectado al endpoint que me diste
     async function eliminarTelefono(telefono) {
       if (!deptoActual) return;
+
       telMsg.textContent = "Eliminando...";
       try {
         const res = await fetch(TEL_ELIMINAR_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ departamento: deptoActual, telefono })
+          body: JSON.stringify({ departamento: deptoActual, telefono: String(telefono) })
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
 
-        const raw = await res.json();               // ideal: que devuelva la lista final
+        const raw = await res.json();
         const telefonos = normalizarTelefonos(raw);
         renderTelefonos(telefonos);
         telMsg.textContent = "Eliminado ✅";
         if (!telefonos.length) await cargarTelefonos(); // fallback
       } catch (e) {
-        telMsg.textContent = "No se pudo eliminar (si aún no existe /telefonos/eliminar, lo armamos).";
+        telMsg.textContent = "No se pudo eliminar (revisá el workflow /telefonos/eliminar).";
         console.error(e);
       }
     }
@@ -253,3 +256,4 @@
   </script>
 </body>
 </html>
+
